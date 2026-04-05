@@ -6,9 +6,11 @@ import io.qameta.allure.Allure;
 import io.qameta.allure.Story;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestWatcher;
+import org.openqa.selenium.Capabilities;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.remote.RemoteWebDriver;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -22,6 +24,11 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -33,9 +40,31 @@ import java.util.regex.Pattern;
  */
 public class ScreenshotExtension implements TestWatcher {
     private static final Path ARTIFACT_ROOT = Path.of("target", "test-artifacts");
+    private static final Path PROOFS_ROOT = Path.of(TestConfig.getString("proofs.dir", "proofs"));
+    private static final boolean PROOFS_ENABLED = Boolean.parseBoolean(TestConfig.getString("proofs.enabled", "true"));
+    private static final String RUN_ID = TestConfig.getString(
+            "proofs.run.id",
+            LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+    );
     private static final Pattern UNSAFE = Pattern.compile("[^a-zA-Z0-9._-]");
+    private static final Map<String, List<ReportEntry>> REPORT_ENTRIES = new HashMap<>();
 
-    private record TestMeta(String outcome, String storyKey, String suiteName, String category, String testName) {}
+    private record TestMeta(
+            String outcome,
+            String storyKey,
+            String suiteName,
+            String browserName,
+            String category,
+            String testName
+    ) {}
+
+    private record ReportEntry(
+            String testName,
+            String outcome,
+            String category,
+            String timestamp,
+            Path relativeImagePath
+    ) {}
 
     @Override
     public void testFailed(ExtensionContext context, Throwable cause) {
@@ -69,7 +98,8 @@ public class ScreenshotExtension implements TestWatcher {
 
             String attachmentName = "Screenshot - " + meta.outcome().toUpperCase() + ": " + context.getDisplayName();
             Allure.addAttachment(attachmentName, "image/png", new ByteArrayInputStream(formatted), "png");
-            writeArtifact(formatted, meta);
+            Path artifactPath = writeArtifact(formatted, meta);
+            writeProofArtifactAndReport(formatted, meta, artifactPath.getFileName().toString());
         }
     }
 
@@ -80,13 +110,14 @@ public class ScreenshotExtension implements TestWatcher {
                 .map(Class::getSimpleName)
                 .map(this::sanitize)
                 .orElse("unknown_suite");
+        String browserName = resolveBrowserName();
         String category = context.getElement()
                 .map(el -> el.getAnnotation(Story.class))
                 .map(Story::value)
                 .map(this::normalizeCategory)
                 .orElse("general");
         String storyKey = resolveStoryKey(context);
-        return new TestMeta(outcome, storyKey, suiteName, category, testName);
+        return new TestMeta(outcome, storyKey, suiteName, browserName, category, testName);
     }
 
     private String normalizeCategory(String story) {
@@ -136,11 +167,12 @@ public class ScreenshotExtension implements TestWatcher {
         }
     }
 
-    private void writeArtifact(byte[] imageBytes, TestMeta meta) {
+    private Path writeArtifact(byte[] imageBytes, TestMeta meta) {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
         Path targetDir = ARTIFACT_ROOT
                 .resolve(meta.storyKey())
                 .resolve(meta.suiteName())
+                .resolve(meta.browserName())
                 .resolve(meta.outcome())
                 .resolve(meta.category());
         Path targetFile = targetDir.resolve(timestamp + "-" + meta.testName() + ".png");
@@ -151,6 +183,88 @@ public class ScreenshotExtension implements TestWatcher {
             }
         } catch (IOException ignored) {
             // Keep test flow uninterrupted even if artifact write fails.
+        }
+        return targetFile;
+    }
+
+    private void writeProofArtifactAndReport(byte[] imageBytes, TestMeta meta, String fileName) {
+        if (!PROOFS_ENABLED) {
+            return;
+        }
+        Path proofBrowserDir = PROOFS_ROOT
+                .resolve(meta.storyKey())
+                .resolve(RUN_ID)
+                .resolve(meta.suiteName())
+                .resolve(meta.browserName());
+        Path proofImageDir = proofBrowserDir
+                .resolve(meta.outcome())
+                .resolve(meta.category());
+        Path proofImagePath = proofImageDir.resolve(fileName);
+        try {
+            Files.createDirectories(proofImageDir);
+            try (InputStream in = new ByteArrayInputStream(imageBytes)) {
+                Files.copy(in, proofImagePath, StandardCopyOption.REPLACE_EXISTING);
+            }
+            Path relativeImagePath = proofBrowserDir.relativize(proofImagePath);
+            appendReportEntryAndRewrite(meta, relativeImagePath, proofBrowserDir);
+        } catch (IOException ignored) {
+            // Keep test flow uninterrupted even if proof write fails.
+        }
+    }
+
+    private void appendReportEntryAndRewrite(TestMeta meta, Path relativeImagePath, Path proofBrowserDir) {
+        String key = meta.storyKey() + "|" + meta.suiteName() + "|" + meta.browserName();
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        synchronized (REPORT_ENTRIES) {
+            List<ReportEntry> entries = REPORT_ENTRIES.computeIfAbsent(key, k -> new ArrayList<>());
+            entries.add(new ReportEntry(meta.testName(), meta.outcome(), meta.category(), timestamp, relativeImagePath));
+            rewriteReport(meta, proofBrowserDir, entries);
+        }
+    }
+
+    private void rewriteReport(TestMeta meta, Path proofBrowserDir, List<ReportEntry> entries) {
+        List<ReportEntry> sorted = new ArrayList<>(entries);
+        sorted.sort(Comparator.comparing(ReportEntry::timestamp).thenComparing(ReportEntry::testName));
+        long passed = sorted.stream().filter(e -> "passed".equals(e.outcome())).count();
+        long failed = sorted.stream().filter(e -> "failed".equals(e.outcome())).count();
+
+        StringBuilder md = new StringBuilder();
+        md.append("# Selenium Proof Report\n\n");
+        md.append("- Story: `").append(meta.storyKey()).append("`\n");
+        md.append("- Suite: `").append(meta.suiteName()).append("`\n");
+        md.append("- Browser: `").append(meta.browserName()).append("`\n");
+        md.append("- Run ID: `").append(RUN_ID).append("`\n");
+        md.append("- Captures: `").append(sorted.size()).append("` (`passed=").append(passed)
+                .append("`, `failed=").append(failed).append("`)\n\n");
+
+        md.append("## Capture Index\n\n");
+        md.append("| Time | Outcome | Category | Test | Image |\n");
+        md.append("|---|---|---|---|---|\n");
+        for (ReportEntry e : sorted) {
+            String imageRef = e.relativeImagePath().toString().replace('\\', '/');
+            md.append("| ")
+                    .append(e.timestamp()).append(" | ")
+                    .append(e.outcome()).append(" | ")
+                    .append(e.category()).append(" | ")
+                    .append(e.testName()).append(" | ")
+                    .append("[view](").append(imageRef).append(") |\n");
+        }
+
+        md.append("\n## Screenshots\n\n");
+        for (ReportEntry e : sorted) {
+            String imageRef = e.relativeImagePath().toString().replace('\\', '/');
+            md.append("### ").append(e.testName()).append(" — ").append(e.outcome()).append("\n\n");
+            md.append("Category: `").append(e.category()).append("`  \n");
+            md.append("Captured: `").append(e.timestamp()).append("`\n\n");
+            md.append("![").append(e.testName()).append("](").append(imageRef).append(")\n\n");
+        }
+
+        Path reportPath = proofBrowserDir.resolve("REPORT.md");
+        try {
+            Files.createDirectories(proofBrowserDir);
+            Files.writeString(reportPath, md.toString());
+        } catch (IOException ignored) {
+            // Keep test flow uninterrupted even if markdown write fails.
         }
     }
 
@@ -176,5 +290,17 @@ public class ScreenshotExtension implements TestWatcher {
             return "UNASSIGNED";
         }
         return sanitized.toUpperCase();
+    }
+
+    private String resolveBrowserName() {
+        WebDriver driver = DriverHolder.get();
+        if (driver instanceof RemoteWebDriver remoteWebDriver) {
+            Capabilities capabilities = remoteWebDriver.getCapabilities();
+            if (capabilities != null && capabilities.getBrowserName() != null) {
+                String browser = sanitize(capabilities.getBrowserName()).replaceAll("_+", "_");
+                return browser.isBlank() ? sanitize(TestConfig.browser()) : browser;
+            }
+        }
+        return sanitize(TestConfig.browser());
     }
 }

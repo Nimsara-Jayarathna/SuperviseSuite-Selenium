@@ -99,7 +99,7 @@ public final class TestConfig {
         return Long.parseLong(value);
     }
 
-    private static String getString(String key, String fallback) {
+    public static String getString(String key, String fallback) {
         String value = getOptional(key);
         return (value == null || value.isBlank()) ? fallback : value;
     }

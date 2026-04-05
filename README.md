@@ -51,7 +51,9 @@ mvn test \
   -Dspeed.profile=normal \
   -Dstep.delay.ms=700 \
   -Dchar.delay.ms=60 \
-  -Dtest.story.key=US-201
+  -Dtest.story.key=US-201 \
+  -Dproofs.enabled=true \
+  -Dproofs.dir=proofs
 ```
 
 Notes:
@@ -81,12 +83,18 @@ Test classes (for example `SupervisorRegistrationTest`) only contain scenario lo
 Allure raw results:
 - `target/allure-results`
 
-Formatted screenshot artifacts:
-- `target/test-artifacts/<USER_STORY>/<TEST_SUITE>/passed/<story-category>/*.png`
-- `target/test-artifacts/<USER_STORY>/<TEST_SUITE>/failed/<story-category>/*.png`
+Runtime screenshot artifacts:
+- `target/test-artifacts/<USER_STORY>/<TEST_SUITE>/<BROWSER>/passed/<story-category>/*.png`
+- `target/test-artifacts/<USER_STORY>/<TEST_SUITE>/<BROWSER>/failed/<story-category>/*.png`
+
+Committable proof set (with Markdown report and images, outside `target/`):
+- `proofs/<USER_STORY>/<RUN_ID>/<TEST_SUITE>/<BROWSER>/REPORT.md`
+- `proofs/<USER_STORY>/<RUN_ID>/<TEST_SUITE>/<BROWSER>/passed/<story-category>/*.png`
+- `proofs/<USER_STORY>/<RUN_ID>/<TEST_SUITE>/<BROWSER>/failed/<story-category>/*.png`
 
 Example:
-- `target/test-artifacts/US-201/supervisorregistrationtest/failed/client-side-validation/...png`
+- `proofs/US-201/20260405-082133/supervisorregistrationtest/chrome/REPORT.md`
+- `proofs/US-201/20260405-082133/supervisorregistrationtest/chrome/failed/client-side-validation/...png`
 
 Each saved image includes a top banner with:
 - outcome (`PASSED` / `FAILED`)
@@ -104,6 +112,12 @@ Generate/open Allure report:
 ```bash
 mvn allure:serve
 ```
+
+Proof report behavior:
+- `REPORT.md` is rewritten during the run and includes:
+  - run metadata (story, suite, browser, run id)
+  - capture index table
+  - embedded screenshots for each captured test state
 
 ## Current User Story Coverage (Supervisor Registration)
 
@@ -141,6 +155,9 @@ Supported keys:
 - `step.delay.ms`
 - `char.delay.ms`
 - `test.story.key`
+- `proofs.enabled`
+- `proofs.dir`
+- `proofs.run.id`
 
 Resolution priority for config values:
 1. JVM system property (`-Dkey=value`)
