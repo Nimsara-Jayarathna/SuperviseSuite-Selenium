@@ -14,22 +14,34 @@ Before running tests:
 
 ## Run Tests
 
-Default run:
-
-```bash
-mvn test
-```
-
-Run via `.env` (recommended for team consistency):
+Team standard (recommended):
 
 ```bash
 cp .env.example .env
-mvn test
+./scripts/run-tests.sh
 ```
 
-`.env` is auto-loaded by the test config. No manual `source .env` is required.
+How `run-tests.sh` works:
+- `run.mode=single` -> runs one browser from `browser`
+- `run.mode=multi` -> runs comma-list from `run.browsers`
 
-Run with browser:
+Common `.env` modes:
+
+```env
+# Fast result run
+run.mode=single
+browser=chrome
+speed.profile=fast
+```
+
+```env
+# Full browser matrix run
+run.mode=multi
+run.browsers=chrome,firefox,safari
+speed.profile=fast
+```
+
+Direct Maven (advanced/manual):
 
 ```bash
 mvn test -Dbrowser=chrome
@@ -37,30 +49,26 @@ mvn test -Dbrowser=firefox
 mvn test -Dbrowser=safari
 ```
 
-Optional runtime config:
+Optional built-in Maven profile:
 
 ```bash
-mvn test \
-  -Dbrowser=chrome \
-  -Dallowed.browsers=chrome,firefox,safari \
-  -Dbase.url=http://localhost:5173 \
-  -Dimplicit.wait.seconds=5 \
-  -Dpage.load.timeout.seconds=30 \
-  -Dscript.timeout.seconds=30 \
-  -Dmodal.wait.seconds=10 \
-  -Dspeed.profile=normal \
-  -Dstep.delay.ms=700 \
-  -Dchar.delay.ms=60 \
-  -Dtest.story.key=US-201 \
-  -Dproofs.enabled=true \
-  -Dproofs.dir=proofs
+mvn test -Pmulti-browser
+```
+
+After run, archive proofs:
+
+```bash
+./scripts/archive-proofs.sh US-201 <RUN_ID>
 ```
 
 Notes:
 - Safari requires enabling `Develop > Allow Remote Automation`.
 - Supported browser values: `chrome`, `firefox`, `safari`.
-- `speed.profile` supports `fast`, `normal`, `slow`.
-- `step.delay.ms` and `char.delay.ms` override profile defaults when provided.
+- `speed.profile` presets:
+  - `fast`: step `0`, char `0` (instant)
+  - `normal`: step `700`, char `60` (default)
+  - `slow`: step `1200`, char `80` (clear demo)
+- `step.delay.ms` and `char.delay.ms` override profile presets only when explicitly set.
 
 ## Architecture (SOLID-friendly)
 
@@ -89,6 +97,7 @@ Runtime screenshot artifacts:
 
 Committable proof set (with Markdown report and images, outside `target/`):
 - `proofs/<USER_STORY>/<RUN_ID>/<TEST_SUITE>/<BROWSER>/REPORT.md`
+- `proofs/<USER_STORY>/<RUN_ID>/<TEST_SUITE>/<BROWSER>/SUMMARY.json`
 - `proofs/<USER_STORY>/<RUN_ID>/<TEST_SUITE>/<BROWSER>/passed/<story-category>/*.png`
 - `proofs/<USER_STORY>/<RUN_ID>/<TEST_SUITE>/<BROWSER>/failed/<story-category>/*.png`
 
@@ -116,8 +125,13 @@ mvn allure:serve
 Proof report behavior:
 - `REPORT.md` is rewritten during the run and includes:
   - run metadata (story, suite, browser, run id)
+  - git commit hash
   - capture index table
   - embedded screenshots for each captured test state
+- `SUMMARY.json` is generated for CI/machine-readable validation.
+
+Skip/abort evidence:
+- Aborted/disabled tests generate proof cards as images, so every outcome has visual evidence.
 
 ## Current User Story Coverage (Supervisor Registration)
 
@@ -139,6 +153,30 @@ For each new story:
 3. Keep test names in `TC-xx` format for deterministic artifact naming.
 4. Reuse existing page objects and shared config; only new scenario logic should be added in the test class.
 
+## Quality Controls
+
+- Flake retry: `retry.max` controls retries per test (`0` disables retries).
+- Naming guard: `naming.validation.enabled=true` + `test.name.pattern` enforce deterministic test names.
+- Preflight checks: `preflight.enabled=true` validates frontend/backend reachability before browser startup.
+- Optional backend role verification: enable `backend.role.assertion.enabled=true` for API-side role checks.
+
+## Proof Archive Command
+
+Zip a full proof run:
+
+```bash
+./scripts/archive-proofs.sh US-201 20260405-082133
+```
+
+## CI Artifact Publishing
+
+GitHub Actions workflow:
+- [.github/workflows/selenium-proofs.yml](/Users/nimsara/Desktop/SuperviseSuite/SuperviseSuite-Selenium/.github/workflows/selenium-proofs.yml)
+
+It uploads:
+- `proofs/**`
+- `target/allure-results/**`
+
 ## Environment File Format
 
 Use [.env.example](/Users/nimsara/Desktop/SuperviseSuite/SuperviseSuite-Selenium/.env.example) as the template.
@@ -146,6 +184,8 @@ Use [.env.example](/Users/nimsara/Desktop/SuperviseSuite/SuperviseSuite-Selenium
 Supported keys:
 - `browser`
 - `allowed.browsers`
+- `run.mode`
+- `run.browsers`
 - `base.url`
 - `implicit.wait.seconds`
 - `page.load.timeout.seconds`
@@ -155,6 +195,13 @@ Supported keys:
 - `step.delay.ms`
 - `char.delay.ms`
 - `test.story.key`
+- `retry.max`
+- `naming.validation.enabled`
+- `test.name.pattern`
+- `preflight.enabled`
+- `preflight.timeout.seconds`
+- `backend.base.url`
+- `backend.role.assertion.enabled`
 - `proofs.enabled`
 - `proofs.dir`
 - `proofs.run.id`

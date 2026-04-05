@@ -78,13 +78,20 @@ public class ScreenshotExtension implements TestWatcher {
 
     @Override
     public void testAborted(ExtensionContext context, Throwable cause) {
-        Allure.addAttachment("Aborted", "text/plain", "Test was aborted: " + cause.getMessage());
+        String reason = cause == null ? "no cause" : cause.getMessage();
+        Allure.addAttachment("Aborted", "text/plain", "Test was aborted: " + reason);
+        TestMeta meta = buildMeta(context, "aborted");
+        byte[] card = createStatusCard(meta, "ABORTED", reason);
+        publishImage(context, meta, card);
     }
 
     @Override
     public void testDisabled(ExtensionContext context, Optional<String> reason) {
         Allure.addAttachment("Disabled", "text/plain",
                 "Test disabled: " + reason.orElse("no reason given"));
+        TestMeta meta = buildMeta(context, "disabled");
+        byte[] card = createStatusCard(meta, "DISABLED", reason.orElse("No reason"));
+        publishImage(context, meta, card);
     }
 
     // -----------------------------------------------------------------------
@@ -95,12 +102,15 @@ public class ScreenshotExtension implements TestWatcher {
             byte[] raw = ts.getScreenshotAs(OutputType.BYTES);
             TestMeta meta = buildMeta(context, outcome);
             byte[] formatted = createLabeledPng(raw, meta);
-
-            String attachmentName = "Screenshot - " + meta.outcome().toUpperCase() + ": " + context.getDisplayName();
-            Allure.addAttachment(attachmentName, "image/png", new ByteArrayInputStream(formatted), "png");
-            Path artifactPath = writeArtifact(formatted, meta);
-            writeProofArtifactAndReport(formatted, meta, artifactPath.getFileName().toString());
+            publishImage(context, meta, formatted);
         }
+    }
+
+    private void publishImage(ExtensionContext context, TestMeta meta, byte[] imageBytes) {
+        String attachmentName = "Screenshot - " + meta.outcome().toUpperCase() + ": " + context.getDisplayName();
+        Allure.addAttachment(attachmentName, "image/png", new ByteArrayInputStream(imageBytes), "png");
+        Path artifactPath = writeArtifact(imageBytes, meta);
+        writeProofArtifactAndReport(imageBytes, meta, artifactPath.getFileName().toString());
     }
 
     private TestMeta buildMeta(ExtensionContext context, String outcome) {
@@ -165,6 +175,47 @@ public class ScreenshotExtension implements TestWatcher {
         } catch (IOException ex) {
             return rawPng;
         }
+    }
+
+    private byte[] createStatusCard(TestMeta meta, String status, String message) {
+        int width = 1400;
+        int height = 420;
+        BufferedImage canvas = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = canvas.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+        Color bg = switch (meta.outcome()) {
+            case "disabled" -> new Color(84, 110, 122);
+            case "aborted" -> new Color(255, 143, 0);
+            default -> new Color(97, 97, 97);
+        };
+        g.setColor(bg);
+        g.fillRect(0, 0, width, height);
+
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("SansSerif", Font.BOLD, 44));
+        g.drawString(status + " | " + meta.storyKey() + " | " + meta.category().toUpperCase(), 44, 90);
+
+        g.setFont(new Font("SansSerif", Font.PLAIN, 28));
+        g.drawString("Suite: " + meta.suiteName() + " | Browser: " + meta.browserName(), 44, 150);
+        g.drawString("Test: " + meta.testName(), 44, 205);
+        g.drawString("Time: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")), 44, 260);
+        g.drawString("Reason: " + trimForCard(message), 44, 320);
+        g.dispose();
+
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            ImageIO.write(canvas, "png", out);
+            return out.toByteArray();
+        } catch (IOException ex) {
+            return new byte[0];
+        }
+    }
+
+    private String trimForCard(String text) {
+        if (text == null || text.isBlank()) {
+            return "n/a";
+        }
+        return text.length() > 120 ? text.substring(0, 117) + "..." : text;
     }
 
     private Path writeArtifact(byte[] imageBytes, TestMeta meta) {
@@ -234,6 +285,7 @@ public class ScreenshotExtension implements TestWatcher {
         md.append("- Suite: `").append(meta.suiteName()).append("`\n");
         md.append("- Browser: `").append(meta.browserName()).append("`\n");
         md.append("- Run ID: `").append(RUN_ID).append("`\n");
+        md.append("- Commit: `").append(resolveGitCommit()).append("`\n");
         md.append("- Captures: `").append(sorted.size()).append("` (`passed=").append(passed)
                 .append("`, `failed=").append(failed).append("`)\n\n");
 
@@ -260,11 +312,50 @@ public class ScreenshotExtension implements TestWatcher {
         }
 
         Path reportPath = proofBrowserDir.resolve("REPORT.md");
+        Path summaryPath = proofBrowserDir.resolve("SUMMARY.json");
         try {
             Files.createDirectories(proofBrowserDir);
             Files.writeString(reportPath, md.toString());
+            Files.writeString(summaryPath, buildSummaryJson(meta, sorted, passed, failed));
         } catch (IOException ignored) {
             // Keep test flow uninterrupted even if markdown write fails.
+        }
+    }
+
+    private String buildSummaryJson(TestMeta meta, List<ReportEntry> sorted, long passed, long failed) {
+        return "{\n"
+                + "  \"story\": \"" + meta.storyKey() + "\",\n"
+                + "  \"suite\": \"" + meta.suiteName() + "\",\n"
+                + "  \"browser\": \"" + meta.browserName() + "\",\n"
+                + "  \"runId\": \"" + RUN_ID + "\",\n"
+                + "  \"commit\": \"" + resolveGitCommit() + "\",\n"
+                + "  \"captures\": " + sorted.size() + ",\n"
+                + "  \"passed\": " + passed + ",\n"
+                + "  \"failed\": " + failed + "\n"
+                + "}\n";
+    }
+
+    private String resolveGitCommit() {
+        String fromEnv = TestConfig.getString("git.commit", "");
+        if (!fromEnv.isBlank()) {
+            return fromEnv;
+        }
+        Path head = Path.of(".git", "HEAD");
+        try {
+            if (!Files.exists(head)) {
+                return "unknown";
+            }
+            String headValue = Files.readString(head).trim();
+            if (headValue.startsWith("ref:")) {
+                String ref = headValue.substring(5).trim();
+                Path refPath = Path.of(".git").resolve(ref);
+                if (Files.exists(refPath)) {
+                    return Files.readString(refPath).trim();
+                }
+            }
+            return headValue;
+        } catch (IOException ignored) {
+            return "unknown";
         }
     }
 

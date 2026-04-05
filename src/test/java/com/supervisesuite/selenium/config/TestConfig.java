@@ -22,6 +22,8 @@ public final class TestConfig {
     private static final long DEFAULT_SCRIPT_TIMEOUT_SECONDS = 30;
     private static final long DEFAULT_MODAL_WAIT_SECONDS = 10;
     private static final String DEFAULT_SPEED_PROFILE = "normal";
+    private static final int DEFAULT_MAX_RETRIES = 0;
+    private static final String DEFAULT_TEST_NAME_PATTERN = "^TC-\\d+.*$";
     private static final Map<String, String> DOT_ENV = loadDotEnv();
 
     private TestConfig() {}
@@ -89,6 +91,34 @@ public final class TestConfig {
 
     public static String defaultStoryKey() {
         return getString("test.story.key", "UNASSIGNED");
+    }
+
+    public static int maxRetries() {
+        return Integer.parseInt(getString("retry.max", String.valueOf(DEFAULT_MAX_RETRIES)));
+    }
+
+    public static boolean namingValidationEnabled() {
+        return Boolean.parseBoolean(getString("naming.validation.enabled", "true"));
+    }
+
+    public static String testNamePattern() {
+        return getString("test.name.pattern", DEFAULT_TEST_NAME_PATTERN);
+    }
+
+    public static boolean preflightEnabled() {
+        return Boolean.parseBoolean(getString("preflight.enabled", "true"));
+    }
+
+    public static long preflightTimeoutSeconds() {
+        return Long.parseLong(getString("preflight.timeout.seconds", "5"));
+    }
+
+    public static String backendBaseUrl() {
+        return getString("backend.base.url", "http://localhost:8080");
+    }
+
+    public static boolean backendRoleAssertionEnabled() {
+        return Boolean.parseBoolean(getString("backend.role.assertion.enabled", "false"));
     }
 
     private static long parseLong(String key, long fallback) {

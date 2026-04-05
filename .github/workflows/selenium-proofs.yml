@@ -1,0 +1,43 @@
+name: Selenium Proofs
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/test/**"
+      - "pom.xml"
+      - ".env.example"
+      - "README.md"
+
+jobs:
+  selenium-proof-run:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Run tests
+        run: mvn -B test -Dbrowser=chrome -Dspeed.profile=fast -Dproofs.enabled=true -Dproofs.dir=proofs -Dtest.story.key=US-201
+
+      - name: Upload proofs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-proofs
+          path: proofs/**
+          if-no-files-found: warn
+
+      - name: Upload allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: target/allure-results/**
+          if-no-files-found: warn

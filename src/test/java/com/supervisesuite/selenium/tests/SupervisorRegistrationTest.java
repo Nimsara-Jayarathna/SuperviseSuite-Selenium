@@ -3,6 +3,7 @@ package com.supervisesuite.selenium.tests;
 import com.supervisesuite.selenium.annotations.UserStory;
 import com.supervisesuite.selenium.pages.SupervisorRegisterPage;
 import com.supervisesuite.selenium.pages.LoginPage;
+import com.supervisesuite.selenium.support.BackendAuthAssertions;
 import io.qameta.allure.*;
 import org.junit.jupiter.api.*;
 import org.openqa.selenium.By;
@@ -313,6 +314,7 @@ class SupervisorRegistrationTest extends BaseUiTest {
                 "Expected successful login redirect to supervisor route");
         assertEquals("SUPERVISOR", readStoredUserRole(),
                 "Expected authenticated user role to be SUPERVISOR");
+        BackendAuthAssertions.assertLoginRole(uniqueEmail, VALID_PASSWORD, "SUPERVISOR");
     }
 
     private String readStoredUserRole() {

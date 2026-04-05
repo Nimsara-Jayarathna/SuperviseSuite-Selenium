@@ -3,7 +3,10 @@ package com.supervisesuite.selenium.tests;
 import com.supervisesuite.selenium.config.TestConfig;
 import com.supervisesuite.selenium.driver.DriverFactory;
 import com.supervisesuite.selenium.extensions.DriverHolder;
+import com.supervisesuite.selenium.extensions.PreflightHealthExtension;
+import com.supervisesuite.selenium.extensions.RetryExtension;
 import com.supervisesuite.selenium.extensions.ScreenshotExtension;
+import com.supervisesuite.selenium.extensions.TestNamingExtension;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,7 +17,12 @@ import java.time.Duration;
 /**
  * Shared Selenium test base with centralized driver + config lifecycle.
  */
-@ExtendWith(ScreenshotExtension.class)
+@ExtendWith({
+        PreflightHealthExtension.class,
+        RetryExtension.class,
+        TestNamingExtension.class,
+        ScreenshotExtension.class
+})
 public abstract class BaseUiTest {
 
     protected static WebDriver driver;
