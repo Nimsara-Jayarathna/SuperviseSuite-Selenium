@@ -1,0 +1,10 @@
+{
+  "story": "US-201",
+  "suite": "supervisorregistrationtest",
+  "browser": "safari",
+  "runId": "20260405-104213",
+  "commit": "9796bfd00cee5c96c11708b4710dcffd0cbf1aa5",
+  "captures": 13,
+  "passed": 13,
+  "failed": 0
+}
