@@ -3,6 +3,7 @@ package com.supervisesuite.selenium.pages;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.PageFactory;
 import org.openqa.selenium.support.ui.ExpectedConditions;
@@ -20,13 +21,37 @@ import java.util.List;
  * The submit button has no id in the source — located by CSS [type=submit].
  * Error paragraphs have no ids — located by their Tailwind colour classes.
  * The success/loading modal title is an <h2> — located by CSS + text content.
+ *
+ * Slow mode:
+ *   Set system property  step.delay.ms  to control the pause (ms) injected after
+ *   each user-facing action (field fill, button click). Default: 700 ms.
+ *   Set  char.delay.ms  to control per-character typing speed. Default: 60 ms.
+ *
+ *   Examples:
+ *     mvn test -Dstep.delay.ms=1200 -Dchar.delay.ms=80   # slow demo
+ *     mvn test -Dstep.delay.ms=0    -Dchar.delay.ms=0    # full speed
  */
 public class SupervisorRegisterPage {
 
     private static final String PATH = "/register/supervisor";
     private static final Duration DEFAULT_WAIT = Duration.ofSeconds(10);
 
+    /**
+     * Pause injected after each field interaction (fill / click).
+     * Override with -Dstep.delay.ms=NNN on the mvn command line.
+     */
+    private static final long STEP_DELAY_MS =
+            Long.parseLong(System.getProperty("step.delay.ms", "700"));
+
+    /**
+     * Delay between individual keystrokes for visible slow typing.
+     * Override with -Dchar.delay.ms=NNN on the mvn command line.
+     */
+    private static final long CHAR_DELAY_MS =
+            Long.parseLong(System.getProperty("char.delay.ms", "60"));
+
     private final WebDriver driver;
+    private final Actions actions;
 
     // -----------------------------------------------------------------------
     // Form fields  (all have stable id attributes in RegisterForm.tsx)
@@ -76,6 +101,7 @@ public class SupervisorRegisterPage {
 
     public SupervisorRegisterPage(WebDriver driver) {
         this.driver = driver;
+        this.actions = new Actions(driver);
         PageFactory.initElements(driver, this);
     }
 
@@ -89,41 +115,47 @@ public class SupervisorRegisterPage {
     }
 
     // -----------------------------------------------------------------------
-    // Field interactions
+    // Field interactions — each field fill uses slow typing + a post-action pause
     // -----------------------------------------------------------------------
 
     public SupervisorRegisterPage fillFirstName(String value) {
         firstNameInput.clear();
-        firstNameInput.sendKeys(value);
+        slowType(firstNameInput, value);
+        pause(STEP_DELAY_MS);
         return this;
     }
 
     public SupervisorRegisterPage fillLastName(String value) {
         lastNameInput.clear();
-        lastNameInput.sendKeys(value);
+        slowType(lastNameInput, value);
+        pause(STEP_DELAY_MS);
         return this;
     }
 
     public SupervisorRegisterPage fillEmail(String value) {
         emailInput.clear();
-        emailInput.sendKeys(value);
+        slowType(emailInput, value);
+        pause(STEP_DELAY_MS);
         return this;
     }
 
     public SupervisorRegisterPage fillPassword(String value) {
         passwordInput.clear();
-        passwordInput.sendKeys(value);
+        slowType(passwordInput, value);
+        pause(STEP_DELAY_MS);
         return this;
     }
 
     public SupervisorRegisterPage fillConfirmPassword(String value) {
         confirmPasswordInput.clear();
-        confirmPasswordInput.sendKeys(value);
+        slowType(confirmPasswordInput, value);
+        pause(STEP_DELAY_MS);
         return this;
     }
 
     public SupervisorRegisterPage clickSubmit() {
         submitButton.click();
+        pause(STEP_DELAY_MS);
         return this;
     }
 
@@ -211,5 +243,34 @@ public class SupervisorRegisterPage {
 
     public String getCurrentUrl() {
         return driver.getCurrentUrl();
+    }
+
+    // -----------------------------------------------------------------------
+    // Slow-mode helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Types {@code text} one character at a time with {@link #CHAR_DELAY_MS}
+     * between keystrokes so the typing is visible in the browser.
+     */
+    private void slowType(WebElement element, String text) {
+        element.click();
+        for (char c : text.toCharArray()) {
+            element.sendKeys(String.valueOf(c));
+            pause(CHAR_DELAY_MS);
+        }
+    }
+
+    /**
+     * Sleeps for {@code ms} milliseconds. Swallows InterruptedException
+     * (restoring the interrupt flag) so callers stay clean.
+     */
+    private void pause(long ms) {
+        if (ms <= 0) return;
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }
