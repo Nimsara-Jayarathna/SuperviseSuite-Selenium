@@ -1,5 +1,6 @@
 package com.supervisesuite.selenium.pages;
 
+import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
@@ -175,14 +176,22 @@ public class SupervisorRegisterPage {
     }
 
     /**
-     * Waits up to {@value DEFAULT_WAIT} seconds for the success modal to appear
-     * and returns true when the title reads "Registration successful".
+     * Waits up to {@link #DEFAULT_WAIT} seconds for the modal title to contain
+     * "Registration successful".
+     *
+     * Why not visibilityOf(modalTitle)?
+     * The loading modal ("Creating supervisor account") renders first using the
+     * same h2 selector. visibilityOf() fires immediately on the loading state,
+     * then getText() returns the loading text → false. We must poll until the
+     * text itself transitions to the success value.
      */
     public boolean isSuccessModalVisible() {
         try {
             new WebDriverWait(driver, DEFAULT_WAIT)
-                    .until(ExpectedConditions.visibilityOf(modalTitle));
-            return modalTitle.getText().contains("Registration successful");
+                    .until(ExpectedConditions.textToBePresentInElementLocated(
+                            By.cssSelector("h2.text-xl.font-semibold"),
+                            "Registration successful"));
+            return true;
         } catch (Exception e) {
             return false;
         }
