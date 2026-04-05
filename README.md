@@ -133,6 +133,22 @@ Proof report behavior:
 Skip/abort evidence:
 - Aborted/disabled tests generate proof cards as images, so every outcome has visual evidence.
 
+Export proof reports to PDF:
+
+```bash
+# Install once
+npm install -g md-to-pdf
+
+# Convert every REPORT.md in the proofs tree to REPORT.pdf
+bash scripts/export-pdf.sh
+
+# Or limit to a specific story or run
+bash scripts/export-pdf.sh proofs/US-201
+bash scripts/export-pdf.sh proofs/US-201/20260405-103053
+```
+
+Each `REPORT.pdf` is written alongside its `REPORT.md` and contains the full test criteria, outcome table, screenshots, and failure reasons in a portable, shareable format.
+
 ## Current User Story Coverage (Supervisor Registration)
 
 Implemented scenarios:

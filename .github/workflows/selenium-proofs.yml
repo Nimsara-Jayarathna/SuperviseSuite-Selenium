@@ -26,7 +26,13 @@ jobs:
       - name: Run tests
         run: mvn -B test -Dbrowser=chrome -Dspeed.profile=fast -Dproofs.enabled=true -Dproofs.dir=proofs -Dtest.story.key=US-201
 
-      - name: Upload proofs
+      - name: Export proof reports to PDF
+        if: always()
+        run: |
+          npm install -g md-to-pdf --silent
+          bash scripts/export-pdf.sh proofs || true
+
+      - name: Upload proofs (screenshots + REPORT.md + REPORT.pdf)
         if: always()
         uses: actions/upload-artifact@v4
         with:
