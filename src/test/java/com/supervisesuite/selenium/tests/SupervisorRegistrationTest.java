@@ -1,16 +1,9 @@
 package com.supervisesuite.selenium.tests;
 
-import com.supervisesuite.selenium.extensions.DriverHolder;
-import com.supervisesuite.selenium.extensions.ScreenshotExtension;
 import com.supervisesuite.selenium.pages.SupervisorRegisterPage;
-import io.github.bonigarcia.wdm.WebDriverManager;
 import io.qameta.allure.*;
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.openqa.selenium.By;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.chrome.ChromeDriver;
-import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
@@ -39,13 +32,9 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @Epic("Supervisor Registration")
 @Feature("Supervisor Registration Form")
-@ExtendWith(ScreenshotExtension.class)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class SupervisorRegistrationTest {
+class SupervisorRegistrationTest extends BaseUiTest {
 
-    private static final String BASE_URL = "http://localhost:5173";
-
-    private static WebDriver driver;
     private SupervisorRegisterPage registerPage;
 
     // ── Shared valid test data ────────────────────────────────────────────
@@ -54,31 +43,10 @@ class SupervisorRegistrationTest {
     private static final String VALID_EMAIL    = "jane.smith@sliit.lk";
     private static final String VALID_PASSWORD = "Test@1234";
 
-    // ── Driver lifecycle ─────────────────────────────────────────────────
-
-    @BeforeAll
-    static void setUpDriver() {
-        WebDriverManager.chromedriver().setup();
-        ChromeOptions options = new ChromeOptions();
-        options.addArguments("--no-sandbox", "--disable-dev-shm-usage");
-        driver = new ChromeDriver(options);
-        driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(5));
-        driver.manage().window().maximize();
-        // Register driver with the extension so screenshots can be captured
-        DriverHolder.set(driver);
-    }
-
-    @AfterAll
-    static void tearDownDriver() {
-        if (driver != null) {
-            driver.quit();
-        }
-    }
-
     @BeforeEach
     void openRegistrationPage() {
         registerPage = new SupervisorRegisterPage(driver);
-        registerPage.open(BASE_URL);
+        registerPage.open(baseUrl());
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -299,7 +267,7 @@ class SupervisorRegistrationTest {
                 "First registration should succeed so the duplicate email exists in DB");
 
         // Navigate back and try the same email again
-        driver.get(BASE_URL + "/register/supervisor");
+        driver.get(baseUrl() + "/register/supervisor");
         registerPage = new SupervisorRegisterPage(driver);
         registerPage.register(VALID_FIRST, VALID_LAST, duplicateEmail, VALID_PASSWORD, VALID_PASSWORD);
 
