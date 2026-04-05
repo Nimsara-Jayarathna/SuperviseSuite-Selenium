@@ -1,5 +1,6 @@
 package com.supervisesuite.selenium.pages;
 
+import com.supervisesuite.selenium.config.TestConfig;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -34,21 +35,9 @@ import java.util.List;
 public class SupervisorRegisterPage {
 
     private static final String PATH = "/register/supervisor";
-    private static final Duration DEFAULT_WAIT = Duration.ofSeconds(10);
-
-    /**
-     * Pause injected after each field interaction (fill / click).
-     * Override with -Dstep.delay.ms=NNN on the mvn command line.
-     */
-    private static final long STEP_DELAY_MS =
-            Long.parseLong(System.getProperty("step.delay.ms", "700"));
-
-    /**
-     * Delay between individual keystrokes for visible slow typing.
-     * Override with -Dchar.delay.ms=NNN on the mvn command line.
-     */
-    private static final long CHAR_DELAY_MS =
-            Long.parseLong(System.getProperty("char.delay.ms", "60"));
+    private final Duration modalWait = Duration.ofSeconds(TestConfig.modalWaitSeconds());
+    private final long stepDelayMs = TestConfig.stepDelayMs();
+    private final long charDelayMs = TestConfig.charDelayMs();
 
     private final WebDriver driver;
     private final Actions actions;
@@ -121,41 +110,41 @@ public class SupervisorRegisterPage {
     public SupervisorRegisterPage fillFirstName(String value) {
         firstNameInput.clear();
         slowType(firstNameInput, value);
-        pause(STEP_DELAY_MS);
+        pause(stepDelayMs);
         return this;
     }
 
     public SupervisorRegisterPage fillLastName(String value) {
         lastNameInput.clear();
         slowType(lastNameInput, value);
-        pause(STEP_DELAY_MS);
+        pause(stepDelayMs);
         return this;
     }
 
     public SupervisorRegisterPage fillEmail(String value) {
         emailInput.clear();
         slowType(emailInput, value);
-        pause(STEP_DELAY_MS);
+        pause(stepDelayMs);
         return this;
     }
 
     public SupervisorRegisterPage fillPassword(String value) {
         passwordInput.clear();
         slowType(passwordInput, value);
-        pause(STEP_DELAY_MS);
+        pause(stepDelayMs);
         return this;
     }
 
     public SupervisorRegisterPage fillConfirmPassword(String value) {
         confirmPasswordInput.clear();
         slowType(confirmPasswordInput, value);
-        pause(STEP_DELAY_MS);
+        pause(stepDelayMs);
         return this;
     }
 
     public SupervisorRegisterPage clickSubmit() {
         submitButton.click();
-        pause(STEP_DELAY_MS);
+        pause(stepDelayMs);
         return this;
     }
 
@@ -219,7 +208,7 @@ public class SupervisorRegisterPage {
      */
     public boolean isSuccessModalVisible() {
         try {
-            new WebDriverWait(driver, DEFAULT_WAIT)
+            new WebDriverWait(driver, modalWait)
                     .until(ExpectedConditions.textToBePresentInElementLocated(
                             By.cssSelector("h2.text-xl.font-semibold"),
                             "Registration successful"));
@@ -250,14 +239,14 @@ public class SupervisorRegisterPage {
     // -----------------------------------------------------------------------
 
     /**
-     * Types {@code text} one character at a time with {@link #CHAR_DELAY_MS}
+     * Types {@code text} one character at a time with configured char delay
      * between keystrokes so the typing is visible in the browser.
      */
     private void slowType(WebElement element, String text) {
         element.click();
         for (char c : text.toCharArray()) {
             element.sendKeys(String.valueOf(c));
-            pause(CHAR_DELAY_MS);
+            pause(charDelayMs);
         }
     }
 

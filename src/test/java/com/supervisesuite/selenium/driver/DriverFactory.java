@@ -1,5 +1,6 @@
 package com.supervisesuite.selenium.driver;
 
+import com.supervisesuite.selenium.config.TestConfig;
 import io.github.bonigarcia.wdm.WebDriverManager;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
@@ -15,6 +16,10 @@ public final class DriverFactory {
     private DriverFactory() {}
 
     public static WebDriver create(String browser) {
+        if (!TestConfig.allowedBrowsers().contains(browser)) {
+            throw new IllegalArgumentException(
+                    "Browser " + browser + " is not in allowed.browsers=" + TestConfig.allowedBrowsers());
+        }
         return switch (browser) {
             case "chrome" -> buildChromeDriver();
             case "firefox" -> buildFirefoxDriver();

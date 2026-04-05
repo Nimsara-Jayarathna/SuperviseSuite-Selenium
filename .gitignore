@@ -32,3 +32,4 @@ target/surefire-reports/
 
 # Screenshots captured during test failures (if added later)
 screenshots/
+.env

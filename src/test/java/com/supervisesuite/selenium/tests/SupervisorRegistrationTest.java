@@ -1,9 +1,12 @@
 package com.supervisesuite.selenium.tests;
 
+import com.supervisesuite.selenium.annotations.UserStory;
 import com.supervisesuite.selenium.pages.SupervisorRegisterPage;
+import com.supervisesuite.selenium.pages.LoginPage;
 import io.qameta.allure.*;
 import org.junit.jupiter.api.*;
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
@@ -32,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @Epic("Supervisor Registration")
 @Feature("Supervisor Registration Form")
+@UserStory("US-201")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class SupervisorRegistrationTest extends BaseUiTest {
 
@@ -278,5 +282,45 @@ class SupervisorRegistrationTest extends BaseUiTest {
         String errorText = registerPage.getGeneralError();
         assertFalse(errorText.isBlank(),
                 "Expected a non-empty conflict error message for duplicate email, got blank");
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // TC-13 — Registration integrates with authentication and role routing
+    // ────────────────────────────────────────────────────────────────────────
+    @Test
+    @Order(13)
+    @Story("Integration with authentication")
+    @Severity(SeverityLevel.BLOCKER)
+    @Description("Register a supervisor, then log in with the same credentials. Verify authentication succeeds, user role is SUPERVISOR, and app redirects to supervisor dashboard route.")
+    @DisplayName("TC-13: Register then login → authenticated as SUPERVISOR and redirected to supervisor dashboard")
+    void tc13_registerThenLogin_redirectsToSupervisorDashboardWithSupervisorRole() {
+        String uniqueEmail = "flow." + UUID.randomUUID().toString().substring(0, 8) + "@sliit.lk";
+
+        registerPage.register(VALID_FIRST, VALID_LAST, uniqueEmail, VALID_PASSWORD, VALID_PASSWORD);
+        assertTrue(registerPage.isSuccessModalVisible(),
+                "Success modal should appear after valid supervisor registration");
+
+        new WebDriverWait(driver, Duration.ofSeconds(15))
+                .until(ExpectedConditions.urlContains("/login"));
+
+        LoginPage loginPage = new LoginPage(driver);
+        loginPage.login(uniqueEmail, VALID_PASSWORD);
+
+        new WebDriverWait(driver, Duration.ofSeconds(20))
+                .until(ExpectedConditions.urlContains("/supervisor"));
+
+        assertTrue(driver.getCurrentUrl().contains("/supervisor"),
+                "Expected successful login redirect to supervisor route");
+        assertEquals("SUPERVISOR", readStoredUserRole(),
+                "Expected authenticated user role to be SUPERVISOR");
+    }
+
+    private String readStoredUserRole() {
+        Object value = ((JavascriptExecutor) driver).executeScript(
+                "const raw = window.localStorage.getItem('ss_user');"
+                        + "if (!raw) return null;"
+                        + "try { return JSON.parse(raw).role ?? null; } catch (e) { return null; }"
+        );
+        return value == null ? null : value.toString();
     }
 }

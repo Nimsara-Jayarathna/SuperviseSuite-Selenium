@@ -1,5 +1,7 @@
 package com.supervisesuite.selenium.extensions;
 
+import com.supervisesuite.selenium.annotations.UserStory;
+import com.supervisesuite.selenium.config.TestConfig;
 import io.qameta.allure.Allure;
 import io.qameta.allure.Story;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -31,9 +33,9 @@ import java.util.regex.Pattern;
  */
 public class ScreenshotExtension implements TestWatcher {
     private static final Path ARTIFACT_ROOT = Path.of("target", "test-artifacts");
-    private static final Pattern UNSAFE = Pattern.compile("[^a-z0-9._-]");
+    private static final Pattern UNSAFE = Pattern.compile("[^a-zA-Z0-9._-]");
 
-    private record TestMeta(String outcome, String category, String testName) {}
+    private record TestMeta(String outcome, String storyKey, String suiteName, String category, String testName) {}
 
     @Override
     public void testFailed(ExtensionContext context, Throwable cause) {
@@ -74,12 +76,17 @@ public class ScreenshotExtension implements TestWatcher {
     private TestMeta buildMeta(ExtensionContext context, String outcome) {
         String displayName = context.getDisplayName();
         String testName = sanitize(displayName);
+        String suiteName = context.getTestClass()
+                .map(Class::getSimpleName)
+                .map(this::sanitize)
+                .orElse("unknown_suite");
         String category = context.getElement()
                 .map(el -> el.getAnnotation(Story.class))
                 .map(Story::value)
                 .map(this::normalizeCategory)
                 .orElse("general");
-        return new TestMeta(outcome, category, testName);
+        String storyKey = resolveStoryKey(context);
+        return new TestMeta(outcome, storyKey, suiteName, category, testName);
     }
 
     private String normalizeCategory(String story) {
@@ -88,7 +95,7 @@ public class ScreenshotExtension implements TestWatcher {
     }
 
     private String sanitize(String value) {
-        return UNSAFE.matcher(value.toLowerCase()).replaceAll("_");
+        return UNSAFE.matcher(value).replaceAll("_").toLowerCase();
     }
 
     private byte[] createLabeledPng(byte[] rawPng, TestMeta meta) {
@@ -117,7 +124,8 @@ public class ScreenshotExtension implements TestWatcher {
             g.setColor(Color.WHITE);
             g.setFont(new Font("SansSerif", Font.BOLD, 18));
             String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-            String label = meta.outcome().toUpperCase() + " | " + meta.category().toUpperCase() + " | " + stamp;
+            String label = meta.outcome().toUpperCase() + " | " + meta.storyKey() + " | "
+                    + meta.category().toUpperCase() + " | " + stamp;
             g.drawString(label, 16, 34);
             g.dispose();
 
@@ -130,7 +138,11 @@ public class ScreenshotExtension implements TestWatcher {
 
     private void writeArtifact(byte[] imageBytes, TestMeta meta) {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
-        Path targetDir = ARTIFACT_ROOT.resolve(meta.outcome()).resolve(meta.category());
+        Path targetDir = ARTIFACT_ROOT
+                .resolve(meta.storyKey())
+                .resolve(meta.suiteName())
+                .resolve(meta.outcome())
+                .resolve(meta.category());
         Path targetFile = targetDir.resolve(timestamp + "-" + meta.testName() + ".png");
         try {
             Files.createDirectories(targetDir);
@@ -140,5 +152,29 @@ public class ScreenshotExtension implements TestWatcher {
         } catch (IOException ignored) {
             // Keep test flow uninterrupted even if artifact write fails.
         }
+    }
+
+    private String resolveStoryKey(ExtensionContext context) {
+        Optional<UserStory> methodStory = context.getElement()
+                .map(el -> el.getAnnotation(UserStory.class));
+        if (methodStory.isPresent()) {
+            return normalizeStoryKey(methodStory.get().value());
+        }
+
+        Optional<UserStory> classStory = context.getTestClass()
+                .map(c -> c.getAnnotation(UserStory.class));
+        if (classStory.isPresent()) {
+            return normalizeStoryKey(classStory.get().value());
+        }
+
+        return normalizeStoryKey(TestConfig.defaultStoryKey());
+    }
+
+    private String normalizeStoryKey(String raw) {
+        String sanitized = sanitize(raw).replaceAll("_+", "_");
+        if (sanitized.isBlank()) {
+            return "UNASSIGNED";
+        }
+        return sanitized.toUpperCase();
     }
 }

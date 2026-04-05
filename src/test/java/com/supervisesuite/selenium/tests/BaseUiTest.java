@@ -23,6 +23,8 @@ public abstract class BaseUiTest {
     static void setUpDriver() {
         driver = DriverFactory.create(TestConfig.browser());
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(TestConfig.implicitWaitSeconds()));
+        driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(TestConfig.pageLoadTimeoutSeconds()));
+        driver.manage().timeouts().scriptTimeout(Duration.ofSeconds(TestConfig.scriptTimeoutSeconds()));
         driver.manage().window().maximize();
         DriverHolder.set(driver);
     }
