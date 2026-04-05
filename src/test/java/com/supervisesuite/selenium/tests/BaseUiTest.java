@@ -10,7 +10,9 @@ import com.supervisesuite.selenium.extensions.TestNamingExtension;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.openqa.selenium.Dimension;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebDriverException;
 
 import java.time.Duration;
 
@@ -33,7 +35,12 @@ public abstract class BaseUiTest {
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(TestConfig.implicitWaitSeconds()));
         driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(TestConfig.pageLoadTimeoutSeconds()));
         driver.manage().timeouts().scriptTimeout(Duration.ofSeconds(TestConfig.scriptTimeoutSeconds()));
-        driver.manage().window().maximize();
+        try {
+            driver.manage().window().maximize();
+        } catch (WebDriverException e) {
+            // Safari on macOS may reject maximize() — fall back to an explicit large size
+            driver.manage().window().setSize(new Dimension(1440, 900));
+        }
         DriverHolder.set(driver);
     }
 

@@ -4,7 +4,6 @@ import com.supervisesuite.selenium.config.TestConfig;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.PageFactory;
 import org.openqa.selenium.support.ui.ExpectedConditions;
@@ -23,24 +22,15 @@ import java.util.List;
  * Error paragraphs have no ids — located by their Tailwind colour classes.
  * The success/loading modal title is an <h2> — located by CSS + text content.
  *
- * Slow mode:
- *   Set system property  step.delay.ms  to control the pause (ms) injected after
- *   each user-facing action (field fill, button click). Default: 700 ms.
- *   Set  char.delay.ms  to control per-character typing speed. Default: 60 ms.
- *
- *   Examples:
- *     mvn test -Dstep.delay.ms=1200 -Dchar.delay.ms=80   # slow demo
- *     mvn test -Dstep.delay.ms=0    -Dchar.delay.ms=0    # full speed
+ * Cross-browser Safari compatibility (React input filling + form submission)
+ * is handled by the BasePage superclass.
  */
-public class SupervisorRegisterPage {
+public class SupervisorRegisterPage extends BasePage {
 
     private static final String PATH = "/register/supervisor";
-    private final Duration modalWait = Duration.ofSeconds(TestConfig.modalWaitSeconds());
-    private final long stepDelayMs = TestConfig.stepDelayMs();
-    private final long charDelayMs = TestConfig.charDelayMs();
+    private static final By SUBMIT_BTN = By.cssSelector("button[type='submit']");
 
-    private final WebDriver driver;
-    private final Actions actions;
+    private final Duration modalWait = Duration.ofSeconds(TestConfig.modalWaitSeconds());
 
     // -----------------------------------------------------------------------
     // Form fields  (all have stable id attributes in RegisterForm.tsx)
@@ -61,7 +51,6 @@ public class SupervisorRegisterPage {
     @FindBy(id = "reg-confirm-password")
     private WebElement confirmPasswordInput;
 
-    // Submit button — no id in source; unique on the page via type=submit
     @FindBy(css = "button[type='submit']")
     private WebElement submitButton;
 
@@ -89,8 +78,7 @@ public class SupervisorRegisterPage {
     // -----------------------------------------------------------------------
 
     public SupervisorRegisterPage(WebDriver driver) {
-        this.driver = driver;
-        this.actions = new Actions(driver);
+        super(driver);
         PageFactory.initElements(driver, this);
     }
 
@@ -104,7 +92,7 @@ public class SupervisorRegisterPage {
     }
 
     // -----------------------------------------------------------------------
-    // Field interactions — each field fill uses slow typing + a post-action pause
+    // Field interactions
     // -----------------------------------------------------------------------
 
     public SupervisorRegisterPage fillFirstName(String value) {
@@ -143,14 +131,13 @@ public class SupervisorRegisterPage {
     }
 
     public SupervisorRegisterPage clickSubmit() {
-        submitButton.click();
+        commitActiveInput();
+        submitForm(submitButton);
         pause(stepDelayMs);
         return this;
     }
 
-    /**
-     * Convenience method — fills all fields and clicks submit in one call.
-     */
+    /** Fills all fields and clicks submit in one call. */
     public SupervisorRegisterPage register(String firstName, String lastName,
                                            String email, String password,
                                            String confirmPassword) {
@@ -166,9 +153,7 @@ public class SupervisorRegisterPage {
     // Assertions / state queries
     // -----------------------------------------------------------------------
 
-    /**
-     * Returns all visible field-level error messages (text-red-500 paragraphs).
-     */
+    /** Returns all visible field-level error messages (text-red-500 paragraphs). */
     public List<String> getFieldErrorMessages() {
         return fieldErrors.stream()
                 .map(WebElement::getText)
@@ -177,11 +162,18 @@ public class SupervisorRegisterPage {
     }
 
     /**
-     * Returns true if any field-level error contains {@code expectedText}.
+     * Waits up to 5 s for a field-level error containing {@code expectedText} to appear.
+     * React re-renders validation errors asynchronously; on Safari the latency is higher.
      */
     public boolean isFieldErrorDisplayed(String expectedText) {
-        return getFieldErrorMessages().stream()
-                .anyMatch(msg -> msg.contains(expectedText));
+        try {
+            new WebDriverWait(driver, Duration.ofSeconds(5))
+                    .until(d -> getFieldErrorMessages().stream()
+                            .anyMatch(msg -> msg.contains(expectedText)));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -197,14 +189,12 @@ public class SupervisorRegisterPage {
     }
 
     /**
-     * Waits up to {@link #DEFAULT_WAIT} seconds for the modal title to contain
+     * Waits up to modalWait seconds for the modal title to contain
      * "Registration successful".
      *
-     * Why not visibilityOf(modalTitle)?
-     * The loading modal ("Creating supervisor account") renders first using the
-     * same h2 selector. visibilityOf() fires immediately on the loading state,
-     * then getText() returns the loading text → false. We must poll until the
-     * text itself transitions to the success value.
+     * Uses textToBePresentInElementLocated (not visibilityOf) because the loading
+     * modal ("Creating supervisor account") appears first on the same selector.
+     * We must poll until the text transitions to the success value.
      */
     public boolean isSuccessModalVisible() {
         try {
@@ -218,9 +208,7 @@ public class SupervisorRegisterPage {
         }
     }
 
-    /**
-     * Returns true if the loading modal ("Creating supervisor account") is visible.
-     */
+    /** Returns true if the loading modal ("Creating supervisor account") is visible. */
     public boolean isLoadingModalVisible() {
         try {
             return modalTitle.isDisplayed()
@@ -232,34 +220,5 @@ public class SupervisorRegisterPage {
 
     public String getCurrentUrl() {
         return driver.getCurrentUrl();
-    }
-
-    // -----------------------------------------------------------------------
-    // Slow-mode helpers
-    // -----------------------------------------------------------------------
-
-    /**
-     * Types {@code text} one character at a time with configured char delay
-     * between keystrokes so the typing is visible in the browser.
-     */
-    private void slowType(WebElement element, String text) {
-        element.click();
-        for (char c : text.toCharArray()) {
-            element.sendKeys(String.valueOf(c));
-            pause(charDelayMs);
-        }
-    }
-
-    /**
-     * Sleeps for {@code ms} milliseconds. Swallows InterruptedException
-     * (restoring the interrupt flag) so callers stay clean.
-     */
-    private void pause(long ms) {
-        if (ms <= 0) return;
-        try {
-            Thread.sleep(ms);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 }
